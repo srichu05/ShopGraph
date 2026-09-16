@@ -1,153 +1,231 @@
 # ShopGraph — Explainable Graph-RAG E-Commerce Intelligence Platform
 
-ShopGraph transforms a large-scale Amazon Musical Instruments review corpus into a connected product knowledge graph and combines Neo4j graph traversal, vector retrieval, and LLM reasoning to provide natural-language product discovery, review intelligence, recommendations, comparisons, and explainable answers.
+ShopGraph transforms an Amazon Musical Instruments review corpus into a connected product knowledge graph in Neo4j, combining structured Cypher graph traversal, dense vector retrieval (`BAAI/bge-base-en-v1.5`), and grounded LLM synthesis to deliver natural-language product discovery, review intelligence, recommendations, comparisons, and explainable evidence.
 
 ---
 
-## 1. Project Architecture & Components
+## 1. Why Graph-RAG?
+
+Standard vector RAG systems suffer from three critical weaknesses in e-commerce:
+1. **Constraint Blindness**: Vector embeddings cannot reliably enforce hard filters (e.g., price ceiling $\le \$300$, brand exclusions, taxonomy boundaries).
+2. **Hallucinated Attributes**: Pure LLMs invent prices, ratings, and specifications not present in the catalog.
+3. **Black-Box Recommendations**: Vector similarity cannot explain *why* two products relate or whether verified buyers engaged with both items.
+
+**ShopGraph resolves this through Graph-RAG**:
+- **Structured Knowledge Graph**: Stores canonical entities (`Product`, `Brand`, `Category`, `Review`, `User`) and verified relationships (`[:BELONGS_TO]`, `[:BRANDED_BY]`, `[:REVIEWS]`, `[:PURCHASED]`).
+- **Dense Vector Search**: 768-dimensional embeddings via `BAAI/bge-base-en-v1.5` for semantic matching on product titles, features, and reviews.
+- **Reciprocal Rank Fusion (RRF)**: Merges graph-structured candidates and vector similarity candidates with $k=60$, enforcing strict pre- and post-fusion hard constraints.
+- **Traceable Evidence**: Synthesized answers cite verified graph facts, review excerpts, and similarity scores.
 
 ```
 User Query
     │
     ▼
-[Phase 4] JavaScript Frontend (Vercel)
+Natural Language Query Understanding (Intent + Hard Constraints)
     │
-    ▼
-[Phase 3] FastAPI Python Backend
-    │
-    ├── Natural Language Query Understanding
-    ├── Untrusted Text-to-Cypher Safeguards (Read-Only)
-    ├── Neo4j Graph Traversal (Cypher)
-    ├── Vector Index / ANN Semantic Search
-    └── Evidence Fusion & Grounded LLM Response (Gemini / Groq)
-    │
-    ▼
-[Phase 2] Neo4j Knowledge Graph
-    ├── Nodes: (:Product), (:User), (:Review), (:Brand), (:Category)
-    └── Edges: [:WROTE], [:REVIEWS], [:PURCHASED], [:BRANDED_BY], [:BELONGS_TO], [:SUB_CATEGORY_OF]
+    ├── Structured Cypher Traversal ──┐
+    │                                 ▼
+    └── BGE Vector Search (ANN) ──► Reciprocal Rank Fusion (k=60) + Hard Constraints Barrier
+                                      │
+                                      ▼
+                                Evidence Fusion (Graph Facts + Reviews + Similarities)
+                                      │
+                                      ▼
+                                Grounded LLM Response (Gemini / Groq)
 ```
 
 ---
 
-## 2. Repository Structure
+## 2. Graph Schema & Semantics
 
-```
-ShopGraph/
-│
-├── data/
-│   ├── raw/                             # Immutable source data (GIT-IGNORED)
-│   │   ├── meta_Musical_Instruments.jsonl
-│   │   └── Musical_Instruments.jsonl
-│   ├── processed/                       # Cleaned, normalized graph entities
-│   │   ├── products.jsonl               # 10,000 canonical products
-│   │   ├── reviews.jsonl                # 50,000 reviews with deterministic IDs
-│   │   ├── categories.jsonl             # 541 canonical hierarchy nodes
-│   │   ├── brands.jsonl                 # 4,531 normalized brands
-│   │   ├── stats.json                   # Preprocessing run statistics
-│   │   └── README.md                    # Data dictionary and schemas
-│   ├── dataset_validation_report.md     # Phase 1 dataset validation report
-│   └── README.md                        # Dataset provenance & statistics
-│
-├── backend/                             # Phase 3 FastAPI Graph-RAG Engine
-│   ├── app/
-│   │   ├── main.py                      # FastAPI entrypoint, CORS, and lifespans
-│   │   ├── config.py                    # Environment settings (Pydantic BaseSettings)
-│   │   ├── api/                         # REST routers (/search, /recommend, /products, /compare, /query)
-│   │   ├── db/neo4j/                    # Thread-safe Neo4j driver & session lifecycle
-│   │   ├── schemas/                     # Pydantic request/response & evidence models
-│   │   └── services/
-│   │       ├── query_understanding/     # Intent classification & constraint parser
-│   │       ├── cypher/                  # Cypher safety validator, sanitizer, generator
-│   │       ├── retrieval/               # Graph, Vector, and Hybrid retrievers
-│   │       ├── embeddings/              # Gemini & local fallback embeddings
-│   │       ├── llm/                     # Gemini & Groq provider abstraction
-│   │       ├── explainability/          # Multi-factor score attribution & graph paths
-│   │       ├── reviews/                 # Rating distribution & aspect sentiment
-│   │       └── recommendations/         # Multi-factor Bayesian recommendation engine
-│   ├── tests/                           # 37 comprehensive unit & integration tests
-│   └── README.md                        # Backend documentation & API contracts
-│
-├── cypher/
-│   ├── constraints.cypher               # Uniqueness constraints on primary IDs
-│   ├── schema.cypher                    # Supporting search & traversal indexes
-│   ├── examples/
-│   │   └── multi_hop_queries.cypher     # 10 representative multi-hop Cypher queries
-│   └── validation/
-│       ├── node_integrity.cypher        # Node count and ID validity queries
-│       ├── relationship_integrity.cypher# Referential integrity queries
-│       └── semantic_checks.cypher       # Semantic boundary & price nullness checks
-│
-├── scripts/
-│   ├── download_raw.py                  # Automated resumable raw downloader
-│   ├── inspect_dataset.py               # Initial streaming inspector
-│   ├── validate_dataset.py              # Full SQLite disk-backed duplicate auditor
-│   ├── preprocess.py                    # Streaming preprocessor (sample & full modes)
-│   ├── ingest_neo4j.py                  # Parameterized batch UNWIND Neo4j loader
-│   └── validate_graph.py                # Automated Neo4j graph integrity validator
-│
-├── .env.example                         # Template configuration
-├── .gitignore                           # Git exclusion rules
-├── ShopGraph_PRD.md                     # Master Product Requirements Document
-└── README.md                            # Project overview & guide
-```
+### Nodes:
+- `(:Product)`: Primary key is canonical `parent_asin`. Contains `title`, `price` (float or null), `average_rating`, `rating_count`, `features`, `embedding` (768d).
+- `(:Brand)`: Normalized brand name.
+- `(:Category)`: Full hierarchical canonical path (e.g., `"Musical Instruments > Guitars > Electric Guitars > Solid Body"`).
+- `(:Review)`: Deterministic review ID. Contains `rating`, `title`, `text`, `timestamp` (publication time), `verified_purchase` (boolean), `variant_asin`.
+- `(:User)`: Reviewer ID.
+
+### Relationships:
+- `(:Product)-[:BELONGS_TO]->(:Category)`
+- `(:Product)-[:BRANDED_BY]->(:Brand)`
+- `(:User)-[:WROTE]->(:Review)-[:REVIEWS]->(:Product)`
+- `(:User)-[:PURCHASED {verified: true}]->(:Product)`: Created **strictly** when `verified_purchase == true`.
+- `(:Category)-[:SUB_CATEGORY_OF]->(:Category)`
+
+> [!IMPORTANT]
+> **Strict Semantic Safeguards**:
+> - Ongoing physical ownership is not claimed.
+> - Combinatorial relationships (`BOUGHT_TOGETHER`, `CO_PURCHASED`, `SIMILAR_TO`) are **never** materialized as static graph edges.
+> - Shared verified purchaser relationships are computed dynamically in Cypher and phrased strictly as *"verified purchasers associated with both products"* — never as observed co-purchases.
 
 ---
 
-## 3. Dataset Semantics & Core Rules
+## 3. Known Data Limitations
 
-- **Canonical Product Identity**: `parent_asin` is the primary `Product.id`.
-- **Variant Handling**: Child `asin` referenced by a review is stored on `Review.variant_asin`.
-- **Review Timestamp**: `timestamp` represents the review publication timestamp, **never an order or purchase date**.
-- **Verified Purchase**: `(:User)-[:PURCHASED]->(:Product)` is created **strictly** when `verified_purchase == true`. Ongoing physical ownership is not claimed.
-- **Category Hierarchy**: Category IDs are full canonical paths (`"Musical Instruments > Guitars > Electric Guitars > Solid Body"`) to prevent collapsing the 72 ambiguous category labels occurring under different parent paths.
-- **Price Nullness**: Missing prices remain `null` and are **never** converted to `$0` or "free".
-- **Combinatorial Safeguards**: Derived (`SHARED_VERIFIED_PURCHASER`, `CO_REVIEWED_WITH`) and semantic (`SIMILAR_TO`) relationships are **not** materialized as unconstrained all-pairs edges; they are computed dynamically via Cypher or vector search.
+1. **Unlisted Catalog Prices**: Approximately 18% of products in the public Amazon corpus have null prices. The engine strictly preserves `null` values and displays `"Price unavailable"` — never fabricating `$0.00` or "free".
+2. **Source Amazon Taxonomy Contamination**: In the source dataset, accessories vastly outnumber instruments (1,897 guitar accessories vs 64 electric guitars). Naive substring search matches accessories; ShopGraph enforces exact taxonomy hierarchy boundaries (`> Electric Guitars >`) to isolate instruments.
+3. **CPU Embedding Latency**: The initial local BGE model execution on CPU requires ~60s cold-start before running warm inference at ~250–450ms.
 
 ---
 
-## 4. Quickstart: Preprocessing & Ingestion
+## 4. Multi-Factor Recommendation Methodology
 
-### Step 1: Environment Setup
+ShopGraph's recommendation engine evaluates 6 distinct transparent factors:
+1. **Category Relevance** ($w=0.20$): Taxonomy path matching.
+2. **Bayesian-Adjusted Rating** ($w=0.25$): Shrinkage formula $\frac{v \cdot R + m \cdot C}{v + m}$ ($C=4.2$, $m=5$) preventing single-review bias.
+3. **Price Fit** ($w=0.15$): Budget ceiling satisfaction.
+4. **Brand Reputation** ($w=0.10$): Brand match and presence.
+5. **Semantic Similarity** ($w=0.15$): Cosine vector distance from BGE embeddings.
+6. **Purchaser Overlap** ($w=0.15$): Shared verified purchaser count on a logarithmic scale.
+
+---
+
+## 5. Local Setup & Quickstart
+
+### Prerequisites:
+- Python 3.10+
+- Node.js 18+
+- Docker Engine (for Neo4j 5.26 Community)
+
+### Step 1: Clone & Configure
 ```bash
-# Copy template configuration
+# Copy template environment file
 cp .env.example .env
-
-# Install required Python packages
-pip install neo4j python-dotenv
 ```
 
-### Step 2: Run Preprocessing
+### Step 2: Start Neo4j via Docker
 ```bash
-# Review-dense development subset (10,000 products with >= 3 reviews, ~50,000 reviews):
-python scripts/preprocess.py --mode sample --sample-products 10000 --sample-reviews 50000
-
-# Or process full dataset (213k products, 3M reviews in memory-optimized streaming pass):
-python scripts/preprocess.py --mode full
+docker compose up -d
+# Neo4j runs on bolt://localhost:7687 and http://localhost:7474
 ```
 
-### Step 3: Ingest into Neo4j
-Configure your Neo4j credentials in `.env` (or pass via CLI):
+### Step 3: Start FastAPI Backend
 ```bash
-# Ingest processed files into Neo4j
-python scripts/ingest_neo4j.py --batch-size 2000
+# Install dependencies
+pip install -r backend/requirements.txt  # or: pip install fastapi uvicorn neo4j sentence-transformers google-genai pytest
 
-# Or test in dry-run mode:
-python scripts/ingest_neo4j.py --dry-run
+# Start development server
+uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000
+```
+Interactive OpenAPI documentation: `http://127.0.0.1:8000/docs`
+
+### Step 4: Start React / Vite Frontend
+```bash
+cd frontend
+npm install
+npm run dev -- --port 3000 --host 127.0.0.1
+```
+Open `http://127.0.0.1:3000` in your browser.
+
+---
+
+## 6. Systematic Evaluation & Benchmarks
+
+Run the executable evaluation framework across the 15 fixed benchmark queries:
+```bash
+python scripts/evaluate_system.py
 ```
 
-### Step 4: Validate Graph Integrity
-```bash
-python scripts/validate_graph.py
-```
+### Measured Comparison:
 
-### Step 5: Launch Phase 3 FastAPI Backend
+| System Configuration | Avg Latency | Hard Constraint Violations | Avg Evidence Items | Grounding Integrity |
+| :--- | :---: | :---: | :---: | :--- |
+| **A. LLM-Only Baseline** | ~1,200 ms | Multiple (Hallucinated prices) | 0.0 | Zero Graph Grounding |
+| **B. Graph-RAG (Cypher)** | 1,115.7 ms | 0 / 15 | 17.8 | 100% Graph Provenance |
+| **C. Hybrid Graph + Vector RAG** | 902.4 ms (warm) | 0 / 15 | 15.9 | Dual Fused Corroboration |
+
+### Local CPU Performance Benchmarks:
 ```bash
-# Run all 37 backend tests
+python scripts/benchmark_performance.py
+```
+- **BGE Model Cold-Start (CPU)**: ~65,000 ms
+- **Structured Cypher Search**: p50 = **239.4 ms** | p95 = **437.2 ms**
+- **BGE Vector Search (CPU)**: p50 = **250.8 ms** | p95 = **534.2 ms**
+- **Hybrid Retrieval (RRF)**: p50 = **822.2 ms** | p95 = **1,477.3 ms**
+- **Product Detail Lookup**: p50 = **20.2 ms** | p95 = **43.5 ms**
+- **Review Intelligence**: p50 = **20.5 ms** | p95 = **151.8 ms**
+
+---
+
+## 7. Security & Production Hardening
+
+- **Cypher Read-Only Validator**: All untrusted queries are checked against strict mutation regexes (`CREATE`, `MERGE`, `DELETE`, `SET`, `DROP`, `ALTER`), forbidden procedures (`CALL dbms`, `apoc.system`, `LOAD CSV`), and unauthorized labels.
+- **Penetration Test Suite**: 38 adversarial security tests passing in `backend/tests/test_adversarial_security.py`.
+- **CORS Hardening**: In production (`APP_ENV=production`), origins are strictly restricted to `CORS_ORIGINS` without wildcard regexes.
+- **Exception Masking**: Production errors mask internal server paths and database connection strings.
+
+---
+
+## 8. Test Execution
+
+```bash
+# Run backend test suite (unit, integration, and adversarial security tests)
 python -m pytest backend/tests/ -v
 
-# Start FastAPI development server on port 8000
-uvicorn app.main:app --app-dir backend --reload --port 8000
-
-# Access interactive Swagger API documentation:
-# http://localhost:8000/docs
+# Run frontend production build
+cd frontend && npm run build
 ```
+
+---
+
+## 9. Production Deployment Guide (Phase 6)
+
+ShopGraph is designed to run in production completely within the free tier of modern cloud platforms:
+* **Frontend**: Vercel (Hobby Free Tier)
+* **Backend**: Google Cloud Run (Serverless Container with 2GB RAM / 1 vCPU)
+* **Graph & Vector Database**: Neo4j AuraDB Free (200k node capacity, vector index support)
+
+### Step 1: Deploy Neo4j AuraDB Free
+1. Sign up at [console.neo4j.io](https://console.neo4j.io) and create a **Free AuraDB Instance**.
+2. Save your connection URI (`neo4j+s://<instance-id>.databases.neo4j.io`) and password.
+3. Migrate the graph and vector embeddings:
+   ```bash
+   # Option A: Direct cloud sync (recommended)
+   python scripts/export_neo4j_dump.py --sync-to-aura --uri neo4j+s://<instance-id>.databases.neo4j.io --password <password>
+
+   # Option B: Export local Docker dump for manual console upload
+   python scripts/export_neo4j_dump.py --dump-local
+   # In Aura Console: Instance -> '...' -> 'Load Database' -> select data/dumps/neo4j_shopgraph.dump
+   ```
+
+### Step 2: Deploy Backend to Google Cloud Run
+1. Ensure the Google Cloud SDK is installed and authenticated:
+   ```bash
+   gcloud auth login
+   gcloud config set project <YOUR_GCP_PROJECT_ID>
+   ```
+2. Build and deploy the backend container directly from source:
+   ```bash
+   gcloud run deploy shopgraph-backend \
+     --source . \
+     --platform managed \
+     --region us-central1 \
+     --allow-unauthenticated \
+     --memory 2Gi \
+     --cpu 1 \
+     --min-instances 0 \
+     --max-instances 3 \
+     --port 8080 \
+     --set-env-vars APP_ENV=production,NEO4J_URI=neo4j+s://<instance-id>.databases.neo4j.io,NEO4J_USERNAME=neo4j,NEO4J_PASSWORD=<password>,LLM_PROVIDER=gemini,GEMINI_API_KEY=<key>,GEMINI_MODEL=gemini-2.5-flash,EMBEDDING_PROVIDER=local,EMBEDDING_MODEL=BAAI/bge-base-en-v1.5,EMBEDDING_DIMENSION=768
+   ```
+   *(Note: `--memory 2Gi` is mandatory for PyTorch CPU + BGE-base; `--min-instances 0` ensures $0 idle cost).*
+3. Verify deployment health:
+   ```bash
+   curl https://<YOUR-CLOUD-RUN-URL>/health
+   ```
+
+### Step 3: Deploy Frontend to Vercel
+1. Import the repository into [Vercel](https://vercel.com).
+2. Set **Root Directory** to `frontend`.
+3. Set Environment Variable:
+   * `VITE_API_BASE_URL` = `https://<YOUR-CLOUD-RUN-URL>`
+4. Click **Deploy**.
+
+### Step 4: Finalize CORS Protection
+Once the Vercel URL is generated (e.g., `https://shopgraph-app.vercel.app`), update Cloud Run:
+```bash
+gcloud run services update shopgraph-backend \
+  --region us-central1 \
+  --update-env-vars CORS_ORIGINS=https://shopgraph-app.vercel.app
+```
+

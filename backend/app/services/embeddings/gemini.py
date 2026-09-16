@@ -34,6 +34,10 @@ class GeminiEmbeddingProvider(BaseEmbeddingProvider):
     def dimension(self) -> int:
         return self._dim
 
+    @property
+    def model_name(self) -> str:
+        return self.model or "text-embedding-004"
+
     def embed_text(self, text: str) -> List[float]:
         if not self._client:
             # Fallback when key is missing or offline

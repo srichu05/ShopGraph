@@ -1,7 +1,14 @@
 """Embeddings module."""
 from app.config import settings
 from app.services.embeddings.base import BaseEmbeddingProvider
-from app.services.embeddings.local import local_embeddings, LocalEmbeddingProvider
+from app.services.embeddings.local import (
+    local_embeddings,
+    LocalEmbeddingProvider,
+    BGEEmbeddingProvider,
+    LocalHashingEmbeddingProvider,
+    bge_embeddings,
+    hashing_embeddings,
+)
 from app.services.embeddings.gemini import GeminiEmbeddingProvider
 
 def get_embedding_provider() -> BaseEmbeddingProvider:
@@ -13,7 +20,11 @@ def get_embedding_provider() -> BaseEmbeddingProvider:
 __all__ = [
     "BaseEmbeddingProvider",
     "LocalEmbeddingProvider",
+    "BGEEmbeddingProvider",
+    "LocalHashingEmbeddingProvider",
     "GeminiEmbeddingProvider",
     "local_embeddings",
+    "bge_embeddings",
+    "hashing_embeddings",
     "get_embedding_provider",
 ]

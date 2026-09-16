@@ -1,0 +1,64 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 45 50% 98%;
+    --foreground: 20 14.3% 4.1%;
+    --card: 0 0% 100%;
+    --card-foreground: 20 14.3% 4.1%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 20 14.3% 4.1%;
+    --primary: 24 69.9% 56.9%;
+    --primary-foreground: 60 9.1% 97.8%;
+    --secondary: 142 71.8% 29.2%;
+    --secondary-foreground: 355.7 100% 97.3%;
+    --muted: 60 4.8% 95.9%;
+    --muted-foreground: 25 5.3% 44.7%;
+    --accent: 35 91.7% 70.8%;
+    --accent-foreground: 24 9.8% 10%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 60 9.1% 97.8%;
+    --border: 20 5.9% 90%;
+    --input: 20 5.9% 90%;
+    --ring: 24 69.9% 56.9%;
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    min-height: 100vh;
+  }
+  h1, h2, h3, h4, .font-serif {
+    font-family: 'Playfair Display', Georgia, serif;
+  }
+}
+
+/* Subtle dot-grid ambient background texture */
+.bg-grid-subtle {
+  background-image: radial-gradient(rgba(120, 113, 108, 0.12) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Smooth horizontal scroll without ugly scrollbar */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Glassmorphism utility */
+.glass {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}

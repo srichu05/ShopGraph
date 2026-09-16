@@ -50,20 +50,38 @@ def run_natural_language_query(req: QueryRequest):
     if any(p.price is None for p in products):
         limitations.append("One or more retrieved products have unlisted (NULL) prices in the catalog.")
 
+    total_evidence = unified_evidence.graph_facts + unified_evidence.vector_evidence + unified_evidence.review_evidence
+    latencies = {
+        "query_understanding": round((t_parse - t0) * 1000, 2),
+        "retrieval": round((t_retrieve - t_parse) * 1000, 2),
+        "generation": round((t_gen - t_retrieve) * 1000, 2),
+        "total": round((t_gen - t0) * 1000, 2),
+    }
+
+    # Lightweight structured observability (zero credentials or keys logged)
+    import uuid, json, logging
+    obs_logger = logging.getLogger("shopgraph.observability")
+    obs_logger.info(
+        "QUERY_EVENT: %s",
+        json.dumps({
+            "query_id": str(uuid.uuid4()),
+            "intent": constraints.intent.value,
+            "strategy": (req.strategy_override or constraints.strategy).value,
+            "candidate_count": len(products),
+            "evidence_count": len(total_evidence),
+            "latency_ms": latencies,
+        }),
+    )
+
     return QueryResponse(
         query=req.query,
         intent=constraints.intent,
         strategy_used=req.strategy_override or constraints.strategy,
         answer=answer,
         products=products,
-        evidence=unified_evidence.graph_facts + unified_evidence.vector_evidence + unified_evidence.review_evidence,
+        evidence=total_evidence,
         cypher_executed=cypher_used,
         explanation=f"Identified intent as '{constraints.intent.value}' using strategy '{constraints.strategy.value}'. Retrieved {len(products)} matching candidate products.",
         limitations=limitations,
-        latency_breakdown_ms={
-            "query_understanding": round((t_parse - t0) * 1000, 2),
-            "retrieval": round((t_retrieve - t_parse) * 1000, 2),
-            "generation": round((t_gen - t_retrieve) * 1000, 2),
-            "total": round((t_gen - t0) * 1000, 2),
-        },
+        latency_breakdown_ms=latencies,
     )

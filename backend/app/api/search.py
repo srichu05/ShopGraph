@@ -60,3 +60,26 @@ def search_products(req: SearchRequest):
         evidence=evidence.graph_facts + evidence.vector_evidence,
         cypher_query=cypher_used,
     )
+
+
+@router.get("", response_model=SearchResponse)
+def search_products_get(
+    query: str = "*",
+    category: Optional[str] = None,
+    brand: Optional[str] = None,
+    min_price: Optional[float] = None,
+    max_price: Optional[float] = None,
+    min_rating: Optional[float] = None,
+    limit: int = 10,
+):
+    """Executes structured or semantic product search via GET with query parameters."""
+    req = SearchRequest(
+        query=query if query.strip() else "*",
+        category=category,
+        brand=brand,
+        min_price=min_price,
+        max_price=max_price,
+        min_rating=min_rating,
+        limit=limit,
+    )
+    return search_products(req)

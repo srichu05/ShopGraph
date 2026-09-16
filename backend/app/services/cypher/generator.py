@@ -57,16 +57,17 @@ class CypherGenerator:
         }
 
         query = """MATCH (p:Product)
-WHERE ($category_name IS NULL OR p.category_id CONTAINS $category_name)
-  AND ($brand_name IS NULL OR toLower(p.brand_name) CONTAINS toLower($brand_name))
+OPTIONAL MATCH (p)-[:BRANDED_BY]->(b:Brand)
+OPTIONAL MATCH (p)-[:BELONGS_TO]->(c:Category)
+WITH p, b, c
+WHERE ($category_name IS NULL OR p.category_id CONTAINS (" > " + $category_name + " > ") OR p.category_id ENDS WITH (" > " + $category_name) OR p.category_id = $category_name)
+  AND ($brand_name IS NULL OR toLower(b.name) CONTAINS toLower($brand_name))
   AND ($max_price IS NULL OR p.price <= $max_price)
   AND ($min_price IS NULL OR p.price >= $min_price)
   AND ($min_rating IS NULL OR p.average_rating >= $min_rating)
-OPTIONAL MATCH (p)-[:BRANDED_BY]->(b:Brand)
-OPTIONAL MATCH (p)-[:BELONGS_TO]->(c:Category)
 RETURN p.id AS id, p.title AS title, p.price AS price, p.average_rating AS average_rating,
        p.rating_count AS rating_count, b.name AS brand_name, c.id AS category_id, p.image_url AS image_url
-ORDER BY p.average_rating DESC, p.rating_count DESC"""
+ORDER BY p.rating_count DESC, p.average_rating DESC"""
         return query, params
 
     def _build_comparison_query(self, product_ids: List[str]) -> Tuple[str, Dict[str, Any]]:

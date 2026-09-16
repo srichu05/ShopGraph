@@ -15,6 +15,8 @@ CATEGORY_KEYWORDS = {
     "electric guitar": "Electric Guitars",
     "acoustic guitar": "Acoustic Guitars",
     "bass": "Bass Guitars",
+    "drum set": "Drum Sets",
+    "drum kit": "Drum Sets",
     "drum": "Drums & Percussion",
     "cymbal": "Cymbals",
     "snare": "Snare Drums",
@@ -28,7 +30,13 @@ CATEGORY_KEYWORDS = {
     "keyboard": "Keyboards & MIDI",
     "piano": "Digital Pianos",
     "synthesizer": "Synthesizers",
-    "cable": "Cables & Interconnects",
+    "guitar cable": "Instrument Cables",
+    "instrument cable": "Instrument Cables",
+    "microphone cable": "Microphone Cables",
+    "patch cable": "Patch Cables",
+    "midi cable": "MIDI Cables",
+    "speaker cable": "Speaker Cables",
+    "cable": "Stage & Studio Cables",
     "stand": "Stands",
     "ukulele": "Ukuleles",
     "violin": "Violins",
@@ -133,8 +141,12 @@ class QueryParser:
         """Extracts minimum rating constraints like '4 stars', 'highly rated', 'at least 4.5'."""
         m_stars = re.search(r"(?:at least|minimum|above|over)?\s*(\d(?:\.\d)?)\s*(?:star|\+?\s*stars|rating)", text)
         if m_stars:
-            val = float(m_stars.group(1))
+            raw = m_stars.group(1)
+            val = float(raw)
             if 1.0 <= val <= 5.0:
+                # In e-commerce rating tiers, '5 star' queries target top-tier products (>= 4.5), while explicit decimals (e.g., 4.8) are preserved
+                if raw == "5":
+                    return 4.5
                 return val
 
         if any(w in text for w in ["top rated", "highly rated", "best rated", "good ratings"]):

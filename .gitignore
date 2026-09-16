@@ -9,10 +9,15 @@ data/raw/
 data/processed/*.jsonl
 data/processed/*.json
 data/*.json
+data/dumps/
+*.dump
 *.jsonl
 *.parquet
 *.tar.gz
 *.zip
+*.npy
+scratch/
+backend/scratch/
 
 # ------------------------------------------------------------------------------
 # 2. Environment Configurations & Secrets (never commit credentials or keys)
@@ -24,12 +29,8 @@ data/*.json
 *.key
 
 # ------------------------------------------------------------------------------
-# 3. Tests & Test Caches (exclude all project tests per repository policy)
+# 3. Test Caches & Coverage Artifacts (automated project tests are tracked)
 # ------------------------------------------------------------------------------
-tests/
-backend/tests/
-test_*.py
-*_test.py
 .pytest_cache/
 .coverage
 htmlcov/
@@ -81,3 +82,11 @@ desktop.ini
 # ------------------------------------------------------------------------------
 ShopGraph_PRD.md
 data/dataset_validation_report.md
+
+# ------------------------------------------------------------------------------
+# 7. Excluded Local Development & Exploration Scripts
+# ------------------------------------------------------------------------------
+scripts/inspect_dataset.py
+scripts/validate_dataset.py
+scripts/update_review_embeddings.py
+scripts/download_raw.py

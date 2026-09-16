@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     APP_ENV: Literal["development", "production", "testing"] = "development"
     DEBUG: bool = False
     API_PREFIX: str = "/api"
+    CORS_ORIGINS: str = ""  # Comma-separated list of allowed origins in production
 
     # Neo4j Graph Database
     NEO4J_URI: str = "bolt://localhost:7687"
@@ -48,7 +49,7 @@ class Settings(BaseSettings):
 
     # Embedding Configuration
     EMBEDDING_PROVIDER: Literal["gemini", "local"] = "local"
-    EMBEDDING_MODEL: str = "text-embedding-004"
+    EMBEDDING_MODEL: str = "BAAI/bge-base-en-v1.5"
     EMBEDDING_DIMENSION: int = 768
 
     # Retrieval Safeguards

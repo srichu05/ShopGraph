@@ -101,6 +101,33 @@ class Neo4jClient:
             logger.error("Neo4j query execution failed: %s | Query: %s", e, query)
             raise
 
+    def execute_write(
+        self,
+        query: str,
+        parameters: Optional[Dict[str, Any]] = None,
+        timeout_ms: Optional[int] = None,
+        database: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Executes a write/mutation query with parameterized inputs and timeout safeguards.
+        """
+        if not self.is_available():
+            raise RuntimeError(
+                f"Neo4j database is unavailable at {settings.NEO4J_URI}."
+            )
+
+        db = database or settings.NEO4J_DATABASE
+        params = parameters or {}
+        timeout_sec = float(timeout_ms or settings.NEO4J_QUERY_TIMEOUT_MS) / 1000.0
+
+        try:
+            with self._driver.session(database=db) as session:
+                result = session.run(query, params, timeout=timeout_sec)
+                return result.data()
+        except Exception as e:
+            logger.error("Neo4j write execution failed: %s | Query: %s", e, query)
+            raise
+
 
 # Global singleton
 neo4j_client = Neo4jClient()

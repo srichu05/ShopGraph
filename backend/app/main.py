@@ -52,23 +52,47 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# CORS Middleware (supports local development and Vercel deployments)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# CORS Middleware
+# In development: allows localhost/127.0.0.1 on ports 3000/5173/8000
+# In production: strictly uses explicitly configured CORS_ORIGINS without regex wildcards
+DEV_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+]
+
+if settings.APP_ENV == "production":
+    prod_origins = [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=prod_origins,
+        allow_origin_regex=None,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["*"],
+    )
+else:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=DEV_ORIGINS,
+        allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?",
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 
 @app.exception_handler(RuntimeError)
 async def runtime_error_handler(request: Request, exc: RuntimeError):
     """Catches unhandled runtime service errors (e.g. database offline)."""
     logger.error("Runtime error handling request %s: %s", request.url, exc)
+    detail_msg = "Internal service error occurred." if settings.APP_ENV == "production" else str(exc)
     return JSONResponse(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        content={"error": "Service Unavailable", "detail": str(exc)},
+        content={"error": "Service Unavailable", "detail": detail_msg},
     )
 
 

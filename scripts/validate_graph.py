@@ -165,8 +165,8 @@ class GraphValidator:
             "MATCH (u:User)-[pur:PURCHASED]->(p:Product) WHERE pur.verified <> true RETURN count(pur) AS c"
         )
         self.run_check(
-            "Suspicious zero/free prices ($0.00)",
-            "MATCH (p:Product) WHERE p.price = 0 OR p.price = 0.0 RETURN count(p) AS c"
+            "Fabricated zero/free prices from missing raw data",
+            "MATCH (p:Product) WHERE (p.price = 0 OR p.price = 0.0) AND (p.raw_price IS NULL OR trim(p.raw_price) = '' OR NOT p.raw_price IN ['0.0', '$0.00', '0']) RETURN count(p) AS c"
         )
         self.run_check(
             "Reviews missing variant_asin",

@@ -26,3 +26,9 @@ class BaseEmbeddingProvider(ABC):
     def dimension(self) -> int:
         """Vector dimension size."""
         pass
+
+    @property
+    @abstractmethod
+    def model_name(self) -> str:
+        """Identifier for the active embedding model."""
+        pass
